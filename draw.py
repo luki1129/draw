@@ -1,22 +1,37 @@
 #!/usr/bin/env python
 
 """"
-Simple implementation of http://arxiv.org/pdf/1502.04623v2.pdf in TensorFlow
+Simple implementation of http://arxiv.org/pdf/1502.04623v2.pdf in TensorFlow. This
+version does not load default MNIST dataset, but seeks for existing one in specified
+directory.
 
 Example Usage: 
-	python draw.py --data_dir=/tmp/draw --read_attn=True --write_attn=True
+	python draw.py
+                [--data_dir=/tmp/draw]          Working data directory
+                [--read_attn=True]              Enable attention for reader
+                [--write_attn=True]             Enable attention for writer
+                [--dataset=mnist]               Directory with dataset, relative to <data_dir>
+                [--restore_checkpoint]          Continue training from last checkpoint
 
 Author: Eric Jang
+Modifications: Lukasz Stalmirski
 """
 
 import tensorflow as tf
 from tensorflow.examples.tutorials import mnist
+from tensorflow.python.platform import gfile
+from tensorflow.python.framework import dtypes
+from tensorflow.contrib.learn.python.learn.datasets import base
+import tensorflow.contrib.learn.python.learn.datasets.mnist as mnist_dataset
 import numpy as np
 import os
+import gzip
 
 tf.flags.DEFINE_string("data_dir", "", "")
 tf.flags.DEFINE_boolean("read_attn", True, "enable attention for reader")
 tf.flags.DEFINE_boolean("write_attn",True, "enable attention for writer")
+tf.flags.DEFINE_string("dataset", "mnist", "")
+tf.flags.DEFINE_boolean("restore_checkpoint", False, "continue training from checkpoint")
 FLAGS = tf.flags.FLAGS
 
 ## MODEL PARAMETERS ## 
@@ -205,10 +220,46 @@ train_op=optimizer.apply_gradients(grads)
 
 ## RUN TRAINING ## 
 
-data_directory = os.path.join(FLAGS.data_dir, "mnist")
-if not os.path.exists(data_directory):
-	os.makedirs(data_directory)
-train_data = mnist.input_data.read_data_sets(data_directory, one_hot=True).train # binarized (0-1) mnist data
+def read_data_sets( train_dir, fake_data=False, one_hot=False, dtype=dtypes.float32, reshape=True, validation_size=5000, seed=None ):
+    """
+    Kinda taken from tensorflow.contrib.learn.python.learn.datasets.mnist
+    The train_dir must contain 4 gzip files:
+     - train-images-idx3-ubyte.gz
+     - train-labels-idx1-ubyte.gz
+     - t10k-images-idx3-ubyte.gz
+     - t10k-labels-idx1-ubyte.gz
+    """
+    with gfile.Open( os.path.join( train_dir, 'train-images-idx3-ubyte.gz' ), 'rb' ) as f:
+        train_images = mnist_dataset.extract_images( f )
+    with gfile.Open( os.path.join( train_dir, 'train-labels-idx1-ubyte.gz' ), 'rb' ) as f:
+        train_labels = mnist_dataset.extract_labels( f, one_hot = one_hot )
+    with gfile.Open( os.path.join( train_dir, 't10k-images-idx3-ubyte.gz' ), 'rb' ) as f:
+        test_images = mnist_dataset.extract_images( f )
+    with gfile.Open( os.path.join( train_dir, 't10k-labels-idx1-ubyte.gz' ), 'rb' ) as f:
+        test_labels = mnist_dataset.extract_labels( f, one_hot = one_hot )
+    if not 0 <= validation_size <= len(train_images):
+        raise ValueError('Validation size should be between 0 and {}. Received: {}.'.format(len(train_images), validation_size))
+    validation_images = train_images[:validation_size]
+    validation_labels = train_labels[:validation_size]
+    train_images = train_images[validation_size:]
+    train_labels = train_labels[validation_size:]
+    options = dict(dtype=dtype, reshape=reshape, seed=seed)
+    train = mnist_dataset.DataSet(train_images, train_labels, **options)
+    validation = mnist_dataset.DataSet(validation_images, validation_labels, **options)
+    test = mnist_dataset.DataSet(test_images, test_labels, **options)
+    return base.Datasets(train=train, validation=validation, test=test)
+
+if FLAGS.dataset != '' and FLAGS.dataset != 'mnist':
+    data_directory = os.path.join(FLAGS.data_dir, FLAGS.dataset)
+    if not os.path.exists(data_directory):
+        raise RuntimeError(FLAGS.dataset + ' dataset not found')
+    train_data = read_data_sets(data_directory, one_hot=True).train
+else:
+    data_directory = os.path.join(FLAGS.data_dir, 'mnist')
+    if not os.path.exists(data_directory):
+        os.makedirs(data_directory)
+    train_data = mnist.input_data.read_data_sets(data_directory, one_hot=True).train # binarized (0-1) mnist data
+
 
 fetches=[]
 fetches.extend([Lx,Lz,train_op])
@@ -219,7 +270,8 @@ sess=tf.InteractiveSession()
 
 saver = tf.train.Saver() # saves variables learned during training
 tf.global_variables_initializer().run()
-#saver.restore(sess, "/tmp/draw/drawmodel.ckpt") # to restore from model, uncomment this line
+if FLAGS.restore_checkpoint:
+    saver.restore(sess, os.path.join(FLAGS.data_dir, "drawmodel.ckpt"))
 
 for i in range(train_iters):
 	xtrain,_=train_data.next_batch(batch_size) # xtrain is (batch_size x img_size)
