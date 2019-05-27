@@ -10,7 +10,8 @@ Example Usage:
                 [--data_dir=/tmp/draw]          Working data directory
                 [--read_attn=True]              Enable attention for reader
                 [--write_attn=True]             Enable attention for writer
-                [--dataset=mnist]               Directory with dataset, relative to <data_dir>
+                [--mnist_dataset=mnist]         Directory with MNIST-like dataset, relative to <data_dir>
+                [--npy_dataset=dataset.npy]     Path to dataset stored as npy file, relative to <data_dir>
                 [--restore_checkpoint]          Continue training from last checkpoint
 
 Author: Eric Jang
@@ -19,38 +20,47 @@ Modifications: Lukasz Stalmirski
 
 import tensorflow as tf
 from tensorflow.examples.tutorials import mnist
-from tensorflow.python.platform import gfile
-from tensorflow.python.framework import dtypes
-from tensorflow.contrib.learn.python.learn.datasets import base
-import dataset
 import numpy as np
 import os
 import gzip
+import dataset
 
 tf.flags.DEFINE_string("data_dir", "", "")
 tf.flags.DEFINE_boolean("read_attn", True, "enable attention for reader")
 tf.flags.DEFINE_boolean("write_attn",True, "enable attention for writer")
 tf.flags.DEFINE_string("mnist_dataset", "", "directory with mnist-like dataset")
+tf.flags.DEFINE_boolean("download_mnist", False, "download default mnist data from the server")
 tf.flags.DEFINE_string("npy_dataset", "", "npy dataset file path")
 tf.flags.DEFINE_boolean("restore_checkpoint", False, "continue training from checkpoint")
 FLAGS = tf.flags.FLAGS
 
 ## DATASET ## 
 
-if FLAGS.npy_dataset is not '' and FLAGS.mnist_dataset is not '':
+if FLAGS.npy_dataset and FLAGS.mnist_dataset:
     raise RuntimeError( 'Only one dataset must be provided for training' )
 
-if FLAGS.npy_dataset is not '':
-    data = dataset.load_npy_dataset( os.path.join( FLAGS.data_dir, FLAGS.npy_dataset ) )
-elif FLAGS.mnist_dataset is not '':
-    data = dataset.load_mnist_dataset( os.path.join( FLAGS.data_dir, FLAGS.mnist_dataset ) )
+# Load data
+if FLAGS.npy_dataset:
+    data = dataset.load_npy_dataset(
+        path=os.path.join( FLAGS.data_dir, FLAGS.npy_dataset ) )
+
+elif FLAGS.mnist_dataset:
+    data = dataset.load_mnist_dataset(
+        directory=os.path.join( FLAGS.data_dir, FLAGS.mnist_dataset ),
+        download=FLAGS.download_mnist )
+
 else:
     raise RuntimeError( 'Dataset must be provided for training' )
 
 w = data.shape
-A,B = int( np.sqrt( w[1] ) ), int( np.sqrt( w[1] ) )
+A, B = int( np.sqrt( w[1] ) ), int( np.sqrt( w[1] ) )
 
-data = data.reshape( (w[0], w[1]) )
+# Reshape input
+if w[2] == 1:
+    data = data.reshape( (w[0], w[1]) )
+
+else:
+    raise RuntimeError( 'Color images are not supported' )
 
 ## MODEL PARAMETERS ## 
 
@@ -237,20 +247,6 @@ for i,(g,v) in enumerate(grads):
 train_op=optimizer.apply_gradients(grads)
 
 ## RUN TRAINING ## 
-
-#def read_data_sets( train_dir, fake_data=False, one_hot=False, dtype=dtypes.float32, reshape=True, validation_size=5000, seed=None ):
-#    pass
-#
-#if FLAGS.dataset != '' and FLAGS.dataset != 'mnist':
-#    data_directory = os.path.join(FLAGS.data_dir, FLAGS.dataset)
-#    if not os.path.exists(data_directory):
-#        raise RuntimeError(FLAGS.dataset + ' dataset not found')
-#    train_data = read_data_sets(data_directory, one_hot=True).train
-#else:
-#    data_directory = os.path.join(FLAGS.data_dir, 'mnist')
-#    if not os.path.exists(data_directory):
-#        os.makedirs(data_directory)
-#train_data = mnist.input_data.read_data_sets(data_directory, one_hot=True).train # binarized (0-1) mnist data
 
 train_data = tf.data.Dataset.from_tensor_slices( data ).repeat().batch( batch_size )
 iterator = train_data.make_initializable_iterator()
