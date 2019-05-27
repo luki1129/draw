@@ -61,9 +61,9 @@ def load_mnist_dataset( directory, download=False ):
     pass
 
 
-def load_weed_dataset( directory, cache_file='weed_dataset.npy', clear_cache=False, image_proc=[] ):
+def load_image_dataset( directory, image_proc=[] ):
     """
-    Load weed dataset from directory with raw images (saved as jpeg, png or other common image format).
+    Load dataset from directory with raw images (saved as jpeg, png or other common image format).
 
     If the directory is empty, exception is raised.
 
@@ -72,33 +72,33 @@ def load_weed_dataset( directory, cache_file='weed_dataset.npy', clear_cache=Fal
 
     Each image may be processed by image_proc functions.
     """
-    if not _os.path.exists( cache_file ) or clear_cache:
-        if not _os.path.exists( directory ):
-            raise RuntimeError( directory + ' no such directory' )
-        if not _os.path.isdir( directory ):
-            raise RuntimeError( directory + ' is not a directory' )
-        images = []
-        image_size = ()
-        for filename in _os.listdir( directory ):
-            try:
-                img = _PIL_Image.open( _os.path.join( directory, filename ) )
-                image_size = img.size
-                for image_proc_func in image_proc:
-                    img = image_proc_func( img )
-                images.append( img )
-            except Exception:
-                pass
-        image_count = len( images )
-        images = _np.asarray( images )
-        images.reshape( (image_count, image_size[0] * image_size[1] ) )
-        _np.save( cache_file, images )
-        return images
-    return _np.load( cache_file )
+    if not _os.path.exists( directory ):
+        raise RuntimeError( directory + ': no such directory' )
+    if not _os.path.isdir( directory ):
+        raise RuntimeError( directory + ': not a directory' )
+    images = []
+    image_size = (0, 0)
+    for filename in _os.listdir( directory ):
+        try:
+            img = _PIL_Image.open( _os.path.join( directory, filename ) )
+            image_size = img.size
+            img = _np.array( img )
+            for image_proc_func in image_proc:
+                img = image_proc_func( img )
+            images.append( img )
+        except Exception:
+            pass
+    image_count = len( images )
+    if image_count == 0:
+        raise RuntimeError( directory + ': directory does not contain any images')
+    images = _np.asarray( images )
+    images.reshape( (image_count, image_size[0] * image_size[1] ) )
+    return images
 
 
-def load_pokemon_dataset( path, cache_file='pokemon_dataset.npy', clear_cache=False, image_proc=[] ):
+def load_npy_dataset( path ):
     """
-    Load pokemon dataset from npy array.
+    Load dataset from npy array.
 
     If the file does not exist, exception is raised.
 
@@ -107,4 +107,4 @@ def load_pokemon_dataset( path, cache_file='pokemon_dataset.npy', clear_cache=Fa
 
     Each image may be processed by image_proc functions.
     """
-    pass
+    return _np.load( path )

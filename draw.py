@@ -30,13 +30,31 @@ import gzip
 tf.flags.DEFINE_string("data_dir", "", "")
 tf.flags.DEFINE_boolean("read_attn", True, "enable attention for reader")
 tf.flags.DEFINE_boolean("write_attn",True, "enable attention for writer")
-tf.flags.DEFINE_string("dataset", "mnist", "")
+tf.flags.DEFINE_string("mnist_dataset", "", "directory with mnist-like dataset")
+tf.flags.DEFINE_string("npy_dataset", "", "npy dataset file path")
 tf.flags.DEFINE_boolean("restore_checkpoint", False, "continue training from checkpoint")
 FLAGS = tf.flags.FLAGS
 
+## DATASET ## 
+
+if FLAGS.npy_dataset is not '' and FLAGS.mnist_dataset is not '':
+    raise RuntimeError( 'Only one dataset must be provided for training' )
+
+if FLAGS.npy_dataset is not '':
+    data = dataset.load_npy_dataset( os.path.join( FLAGS.data_dir, FLAGS.npy_dataset ) )
+elif FLAGS.mnist_dataset is not '':
+    data = dataset.load_mnist_dataset( os.path.join( FLAGS.data_dir, FLAGS.mnist_dataset ) )
+else:
+    raise RuntimeError( 'Dataset must be provided for training' )
+
+w = data.shape
+A,B = int( np.sqrt( w[1] ) ), int( np.sqrt( w[1] ) )
+
+data = data.reshape( (w[0], w[1]) )
+
 ## MODEL PARAMETERS ## 
 
-A,B = 28,28 # image width,height
+#A,B = 28,28 # image width,height
 img_size = B*A # the canvas size
 enc_size = 256 # number of hidden units / output size in LSTM
 dec_size = 256
@@ -234,9 +252,6 @@ train_op=optimizer.apply_gradients(grads)
 #        os.makedirs(data_directory)
 #train_data = mnist.input_data.read_data_sets(data_directory, one_hot=True).train # binarized (0-1) mnist data
 
-data_directory = os.path.join( FLAGS.data_dir, FLAGS.dataset )
-
-data = dataset.load_weed_dataset( data_directory )
 train_data = tf.data.Dataset.from_tensor_slices( data ).repeat().batch( batch_size )
 iterator = train_data.make_initializable_iterator()
 
