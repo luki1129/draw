@@ -102,7 +102,11 @@ def load_mnist_dataset( directory, download=False ):
             data = data.reshape( num_images, rows*cols, 1 )
             # normalize
             data = data.astype( _np.float32 )
-            data = _np.multiply( data, 1 / 255 )
+            data = _np.multiply( data, 1.0 / 255.0 )
+            # shuffle
+            perm = _np.arange( num_images )
+            _np.random.shuffle( perm )
+            data = data[perm]
     return data
 
 
